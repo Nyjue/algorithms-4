@@ -2,12 +2,10 @@
 Sorting Assignment Starter Code
 Implement five sorting algorithms and benchmark their performance.
 """
-
-import json
 import time
-import random
 import tracemalloc
-
+import json
+import os
 
 # PART 1: SORTING IMPLEMENTATIONS
 
@@ -86,10 +84,6 @@ def merge(left, right):
     result.extend(right[j:])
     return result
 
-# ============================================================================
-# PART 2: STABILITY DEMONSTRATION
-# ============================================================================
-
 # PART 2: STABILITY DEMONSTRATION
 
 def demonstrate_stability():
@@ -115,6 +109,10 @@ def demonstrate_stability():
     
     stability_results = {}
     
+    print("\n" + "="*60)
+    print("STABILITY DEMONSTRATION")
+    print("="*60)
+    
     for name, algo_func in algorithms.items():
         # Sort by price only
         sorted_products = algo_func(products.copy(), key="price")
@@ -127,6 +125,8 @@ def demonstrate_stability():
         print(f"\n{name} - Stable: {stable}")
         if not stable:
             print("  Note: Equal price items may have been reordered")
+        else:
+            print("  ✓ Preserves order of equal-price items")
     
     return stability_results
 
@@ -215,67 +215,92 @@ def merge_products(left, right, key):
     result.extend(right[j:])
     return result
 
-
-# ============================================================================
 # PART 3: PERFORMANCE BENCHMARKING
-# ============================================================================
-
-# PART 3: PERFORMANCE BENCHMARKING
-
-import time
-import tracemalloc
-import json
 
 def benchmark_algorithm(algorithm, dataset_path, algorithm_name):
     """
     Load dataset, measure execution time and memory usage.
     Returns dictionary with performance metrics.
     """
-    # Load the dataset
-    with open(dataset_path, 'r') as f:
-        data = json.load(f)
-    
-    # Extract the values to sort (assuming dataset is list of numbers or dicts with values)
-    if isinstance(data[0], dict):
-        # For product/order data, extract appropriate field
-        values = [item['price'] if 'price' in item else item.get('value', 0) for item in data]
-    else:
-        values = data.copy()
-    
-    # Take a subset for O(n²) algorithms
-    if algorithm_name in ["Bubble Sort", "Selection Sort", "Insertion Sort"]:
-        values = values[:5000]  # Use subset for quadratic algorithms
-    
-    # Measure memory before
-    tracemalloc.start()
-    
-    # Measure time
-    start_time = time.perf_counter()
-    
-    # Run the algorithm
-    sorted_values = algorithm(values.copy())
-    
-    end_time = time.perf_counter()
-    
-    # Measure memory usage
-    current, peak = tracemalloc.get_traced_memory()
-    tracemalloc.stop()
-    
-    return {
-        'algorithm': algorithm_name,
-        'time_seconds': end_time - start_time,
-        'memory_mb': peak / 10**6,  # Convert to MB
-        'dataset_size': len(values)
-    }
+    try:
+        # Load the dataset
+        with open(dataset_path, 'r') as f:
+            data = json.load(f)
+        
+        # Extract the values to sort (assuming dataset is list of numbers or dicts with values)
+        if isinstance(data[0], dict):
+            # For product/order data, extract appropriate field
+            if 'price' in data[0]:
+                values = [item['price'] for item in data]
+            elif 'value' in data[0]:
+                values = [item['value'] for item in data]
+            else:
+                # Try to find a numeric field
+                for key in data[0].keys():
+                    if isinstance(data[0][key], (int, float)):
+                        values = [item[key] for item in data]
+                        break
+                else:
+                    values = list(range(len(data)))  # Fallback
+        else:
+            values = data.copy()
+        
+        # Take a subset for O(n²) algorithms to avoid long wait times
+        if algorithm_name in ["Bubble Sort", "Selection Sort", "Insertion Sort"]:
+            test_size = min(2000, len(values))  # Use 2000 items for quadratic algorithms
+            values = values[:test_size]
+        else:
+            test_size = min(10000, len(values))  # Use 10000 for merge sort
+            values = values[:test_size]
+        
+        # Measure memory before
+        tracemalloc.start()
+        
+        # Measure time
+        start_time = time.perf_counter()
+        
+        # Run the algorithm
+        sorted_values = algorithm(values.copy())
+        
+        end_time = time.perf_counter()
+        
+        # Measure memory usage
+        current, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        
+        # Verify it's sorted (optional)
+        is_sorted = all(sorted_values[i] <= sorted_values[i+1] for i in range(len(sorted_values)-1))
+        
+        return {
+            'algorithm': algorithm_name,
+            'time_seconds': end_time - start_time,
+            'memory_mb': peak / 10**6,  # Convert to MB
+            'dataset_size': len(values),
+            'valid': is_sorted
+        }
+    except Exception as e:
+        print(f"Error benchmarking {algorithm_name} on {dataset_path}: {e}")
+        return None
 
 def benchmark_all_datasets():
     """Run benchmarks on all datasets"""
+    # Check if datasets directory exists
+    if not os.path.exists('datasets'):
+        print("Error: 'datasets' folder not found. Run data_generator.py first.")
+        return []
+    
     datasets = {
         'Order Processing': 'datasets/orders.json',
         'Product Catalog': 'datasets/products.json',
         'Inventory': 'datasets/inventory.json',
         'Activity Log': 'datasets/activity_log.json'
     }
+    
+    # Check if all dataset files exist
+    for name, path in datasets.items():
+        if not os.path.exists(path):
+            print(f"Warning: {path} not found. Run data_generator.py to generate all datasets.")
+            return []
     
     algorithms = [
         (bubble_sort, 'Bubble Sort'),
@@ -286,17 +311,23 @@ def benchmark_all_datasets():
     
     results = []
     
+    print("\n" + "="*80)
+    print("PERFORMANCE BENCHMARKING")
+    print("="*80)
+    
     for dataset_name, dataset_path in datasets.items():
         print(f"\nBenchmarking on {dataset_name}...")
+        print("-" * 40)
         
         for algo_func, algo_name in algorithms:
-            try:
-                print(f"  Running {algo_name}...")
-                metrics = benchmark_algorithm(algo_func, dataset_path, algo_name)
+            print(f"  Running {algo_name}...", end="", flush=True)
+            metrics = benchmark_algorithm(algo_func, dataset_path, algo_name)
+            if metrics:
                 metrics['dataset'] = dataset_name
                 results.append(metrics)
-            except Exception as e:
-                print(f"    Error: {e}")
+                print(f" done! Time: {metrics['time_seconds']:.4f}s, Memory: {metrics['memory_mb']:.2f}MB")
+            else:
+                print(" failed!")
     
     # Print results table
     print_results_table(results)
@@ -304,10 +335,82 @@ def benchmark_all_datasets():
 
 def print_results_table(results):
     """Print formatted results table"""
+    if not results:
+        print("\nNo results to display.")
+        return
+    
     print("\n" + "="*100)
-    print(f"{'Algorithm':<20} {'Dataset':<20} {'Time (s)':<15} {'Memory (MB)':<15} {'Size':<10}")
+    print("BENCHMARK RESULTS SUMMARY")
+    print("="*100)
+    print(f"{'Algorithm':<20} {'Dataset':<20} {'Time (s)':<15} {'Memory (MB)':<15} {'Size':<10} {'Valid':<8}")
     print("="*100)
     
     for r in results:
-        print(f"{r['algorithm']:<20} {r['dataset']:<20} {r['time_seconds']:<15.4f} {r['memory_mb']:<15.2f} {r['dataset_size']:<10}")
-       
+        valid_str = "✓" if r.get('valid', False) else "?"
+        print(f"{r['algorithm']:<20} {r['dataset']:<20} {r['time_seconds']:<15.4f} {r['memory_mb']:<15.2f} {r['dataset_size']:<10} {valid_str:<8}")
+
+def test_sorting_correctness():
+    """Test all sorting algorithms on small test cases"""
+    print("\n" + "="*60)
+    print("TESTING SORTING CORRECTNESS")
+    print("="*60)
+    
+    # Small test cases
+    test_cases = [
+        ([], []),
+        ([1], [1]),
+        ([5, 2, 8, 1, 9], [1, 2, 5, 8, 9]),
+        ([3, 3, 3, 3], [3, 3, 3, 3]),
+        ([5, 4, 3, 2, 1], [1, 2, 3, 4, 5]),
+        ([1, 2, 3, 4, 5], [1, 2, 3, 4, 5])
+    ]
+    
+    algorithms = [
+        (bubble_sort, "Bubble Sort"),
+        (selection_sort, "Selection Sort"),
+        (insertion_sort, "Insertion Sort"),
+        (merge_sort, "Merge Sort")
+    ]
+    
+    all_passed = True
+    
+    for algo_func, algo_name in algorithms:
+        print(f"\nTesting {algo_name}:")
+        passed = 0
+        total = len(test_cases)
+        
+        for i, (input_arr, expected) in enumerate(test_cases):
+            result = algo_func(input_arr)
+            if result == expected:
+                passed += 1
+                print(f"  ✓ Test {i+1} passed")
+            else:
+                all_passed = False
+                print(f"  ✗ Test {i+1} failed: {input_arr} -> {result}, expected {expected}")
+        
+        print(f"  {passed}/{total} tests passed")
+    
+    if all_passed:
+        print("\n✅ All sorting algorithms working correctly!")
+    else:
+        print("\n❌ Some tests failed. Check implementations.")
+    
+    return all_passed
+
+# MAIN EXECUTION
+if __name__ == "__main__":
+    print("SORTING ALGORITHM PERFORMANCE OPTIMIZER")
+    print("="*60)
+    
+    # Test sorting correctness
+    test_sorting_correctness()
+    
+    # Demonstrate stability
+    demonstrate_stability()
+    
+    # Run benchmarks
+    benchmark_all_datasets()
+    
+    print("\n" + "="*60)
+    print("ALL TESTS COMPLETE")
+    print("="*60)

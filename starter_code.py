@@ -310,5 +310,4 @@ def print_results_table(results):
     
     for r in results:
         print(f"{r['algorithm']:<20} {r['dataset']:<20} {r['time_seconds']:<15.4f} {r['memory_mb']:<15.2f} {r['dataset_size']:<10}")
-        if __name__ == "__main__":
-pass
+       
